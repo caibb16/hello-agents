@@ -7,7 +7,7 @@
 
 import asyncio
 from typing import TypedDict, Annotated
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -22,8 +22,8 @@ load_dotenv()
 # 定义状态结构
 class SearchState(TypedDict):
     messages: Annotated[list, add_messages]
-    user_query: str        # 用户查询
-    search_query: str      # 优化后的搜索查询
+    user_query: str        # LLM理解后的用户查询总结
+    search_query: str      # 关键词筛选后的搜索查询
     search_results: str    # Tavily搜索结果
     final_answer: str      # 最终答案
     step: str             # 当前步骤
@@ -59,22 +59,22 @@ def understand_query_node(state: SearchState) -> SearchState:
 理解：[用户需求总结]
 搜索词：[最佳搜索关键词]"""
 
-    response = llm.invoke([SystemMessage(content=understand_prompt)])
+    response = llm.invoke([HumanMessage(content=understand_prompt)])
     
     # 提取搜索关键词
     response_text = response.content
     search_query = user_message  # 默认使用原始查询
     
     if "搜索词：" in response_text:
-        search_query = response_text.split("搜索词：")[1].strip()
+        search_query = response_text.split("搜索词")[1].strip()
     elif "搜索关键词：" in response_text:
-        search_query = response_text.split("搜索关键词：")[1].strip()
+        search_query = response_text.split("搜索关键词")[1].strip()
     
     return {
-        "user_query": response.content,
+        "user_query": response_text,
         "search_query": search_query,
         "step": "understood",
-        "messages": [AIMessage(content=f"我理解您的需求：{response.content}")]
+        "messages": [AIMessage(content=f"我理解您的需求：{response_text}")]
     }
 
 def tavily_search_node(state: SearchState) -> SearchState:
@@ -141,7 +141,7 @@ def generate_answer_node(state: SearchState) -> SearchState:
 
 请提供一个有用的回答，并说明这是基于已有知识的回答。"""
         
-        response = llm.invoke([SystemMessage(content=fallback_prompt)])
+        response = llm.invoke([HumanMessage(content=fallback_prompt)])
         
         return {
             "final_answer": response.content,
@@ -164,7 +164,7 @@ def generate_answer_node(state: SearchState) -> SearchState:
 4. 回答要结构清晰、易于理解
 5. 如果搜索结果不够完整，请说明并提供补充建议"""
 
-    response = llm.invoke([SystemMessage(content=answer_prompt)])
+    response = llm.invoke([HumanMessage(content=answer_prompt)])
     
     return {
         "final_answer": response.content,
