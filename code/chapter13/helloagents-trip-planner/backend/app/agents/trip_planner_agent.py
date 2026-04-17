@@ -1,6 +1,7 @@
 """多智能体旅行规划系统"""
 
 import json
+import re
 from typing import Dict, Any, List
 from hello_agents import SimpleAgent
 from hello_agents.tools import MCPTool
@@ -372,26 +373,7 @@ class MultiAgentTripPlanner:
             旅行计划
         """
         try:
-            # 尝试从响应中提取JSON
-            # 查找JSON代码块
-            if "```json" in response:
-                json_start = response.find("```json") + 7
-                json_end = response.find("```", json_start)
-                json_str = response[json_start:json_end].strip()
-            elif "```" in response:
-                json_start = response.find("```") + 3
-                json_end = response.find("```", json_start)
-                json_str = response[json_start:json_end].strip()
-            elif "{" in response and "}" in response:
-                # 直接查找JSON对象
-                json_start = response.find("{")
-                json_end = response.rfind("}") + 1
-                json_str = response[json_start:json_end]
-            else:
-                raise ValueError("响应中未找到JSON数据")
-            
-            # 解析JSON
-            data = json.loads(json_str)
+            data = self._extract_first_json_object(response)
             
             # 转换为TripPlan对象
             trip_plan = TripPlan(**data)
@@ -402,6 +384,54 @@ class MultiAgentTripPlanner:
             print(f"⚠️  解析响应失败: {str(e)}")
             print(f"   将使用备用方案生成计划")
             return self._create_fallback_plan(request)
+
+    def _extract_first_json_object(self, response: str) -> Dict[str, Any]:
+        """从LLM响应中提取首个可解析的JSON对象。"""
+        candidates: List[str] = []
+
+        # 优先尝试```json ...```代码块
+        json_blocks = re.findall(r"```json\s*(.*?)```", response, flags=re.IGNORECASE | re.DOTALL)
+        candidates.extend(block.strip() for block in json_blocks if block.strip())
+
+        # 再尝试普通``` ...```代码块，兼容```JSON等语言标记
+        code_blocks = re.findall(r"```\s*(.*?)```", response, flags=re.DOTALL)
+        for block in code_blocks:
+            text = block.strip()
+            if not text:
+                continue
+            lines = text.splitlines()
+            if lines and re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", lines[0].strip()):
+                text = "\n".join(lines[1:]).strip()
+            if text:
+                candidates.append(text)
+
+        # 最后回退到整段响应文本
+        candidates.append(response.strip())
+
+        for candidate in candidates:
+            parsed = self._decode_first_json_from_text(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+
+        raise ValueError("响应中未找到可解析的JSON对象")
+
+    def _decode_first_json_from_text(self, text: str) -> Any:
+        """在任意文本中定位并解析首个JSON值，允许后续存在额外文本。"""
+        decoder = json.JSONDecoder()
+        stripped = text.strip()
+        if not stripped:
+            return None
+
+        for i, ch in enumerate(stripped):
+            if ch not in "{[":
+                continue
+            try:
+                obj, _ = decoder.raw_decode(stripped[i:])
+                return obj
+            except json.JSONDecodeError:
+                continue
+        return None
+
     
     def _create_fallback_plan(self, request: TripRequest) -> TripPlan:
         """创建备用计划(当Agent失败时)"""
