@@ -268,25 +268,29 @@ class MultiAgentTripPlanner:
             print("📍 步骤1: 搜索景点...")
             attraction_query = self._build_attraction_query(request)
             attraction_response = self.attraction_agent.run(attraction_query)
-            print(f"景点搜索结果: {attraction_response[:200]}...\n")
+            attraction_response = self._strip_think_content(attraction_response)
+            print(f"景点搜索结果: {attraction_response[:500]}...\n")
 
             # 步骤2: 天气查询Agent查询天气
             print("🌤️  步骤2: 查询天气...")
             weather_query = f"请查询{request.city}的天气信息"
             weather_response = self.weather_agent.run(weather_query)
-            print(f"天气查询结果: {weather_response[:200]}...\n")
+            weather_response = self._strip_think_content(weather_response)
+            print(f"天气查询结果: {weather_response[:500]}...\n")
 
             # 步骤3: 酒店推荐Agent搜索酒店
             print("🏨 步骤3: 搜索酒店...")
             hotel_query = f"请搜索{request.city}的{request.accommodation}酒店"
             hotel_response = self.hotel_agent.run(hotel_query)
-            print(f"酒店搜索结果: {hotel_response[:200]}...\n")
+            hotel_response = self._strip_think_content(hotel_response)
+            print(f"酒店搜索结果: {hotel_response[:500]}...\n")
 
             # 步骤4: 行程规划Agent整合信息生成计划
             print("📋 步骤4: 生成行程计划...")
             planner_query = self._build_planner_query(request, attraction_response, weather_response, hotel_response)
             planner_response = self.planner_agent.run(planner_query)
-            print(f"行程规划结果: {planner_response[:300]}...\n")
+            planner_response = self._strip_think_content(planner_response)
+            print(f"行程规划结果: {planner_response[:800]}...\n")
 
             # 解析最终计划
             trip_plan = self._parse_response(planner_response, request)
@@ -478,6 +482,13 @@ class MultiAgentTripPlanner:
             weather_info=[],
             overall_suggestions=f"这是为您规划的{request.city}{request.travel_days}日游行程,建议提前查看各景点的开放时间。"
         )
+    
+    def _strip_think_content(self, text: str) -> str:
+        """去除llm response中的<think>...</think>内容"""
+        if not text:
+            return text
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
+        return text.strip()
 
 
 # 全局多智能体系统实例
