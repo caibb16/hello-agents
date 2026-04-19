@@ -77,10 +77,13 @@ class NPCBatchGenerator:
 
             # 一次LLM调用生成所有对话
             # 使用invoke方法而不是chat方法
-            response = self.llm.invoke([
+            response = self.llm.invoke(
+                [
                 {"role": "system", "content": "你是一个游戏NPC对话生成器,擅长创作自然真实的办公室对话。"},
                 {"role": "user", "content": prompt}
-            ])
+                ],
+                extra_body={"reasoning_split": True},
+            )
 
             # 解析JSON响应
             dialogues = self._parse_response(response)
