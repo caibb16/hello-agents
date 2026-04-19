@@ -1,7 +1,18 @@
 """配置文件"""
 
 import os
+from pathlib import Path
 from typing import Optional
+from dotenv import load_dotenv
+
+# 加载环境变量
+# 首先尝试加载当前目录的.env
+load_dotenv()
+
+# 然后尝试加载HelloAgents的.env(如果存在)
+helloagents_env = Path(__file__).parent.parent.parent.parent / "HelloAgents" / ".env"
+if helloagents_env.exists():
+    load_dotenv(helloagents_env, override=False)  # 不覆盖已有的环境变量
 
 class Settings:
     """应用配置"""
